@@ -16,6 +16,7 @@ CFLAGS=$(COMMON_CFLAGS)
 ARCH_FLAGS=
 EXT_DEP=
 ARCHIVE_LIBS=-larchive
+STATIC_ARCHIVE_LIBS=-larchive -lxml2 -lbz2 -lz -liconv -llzma -lws2_32
 
 OBJ=$(BUILDDIR_BIN)/save_the_zazus.o \
     $(BUILDDIR_BIN)/package_img_atlas0_png.o \
@@ -26,13 +27,13 @@ ifeq ($(TARGET),win32)
 	CC=i686-w64-mingw32-gcc
 	ARCH_FLAGS=-m32 -DLIBARCHIVE_STATIC
 	BINEXT=.exe
-	LIB=-static $(ARCHIVE_LIBS)
+	LIB=-static $(STATIC_ARCHIVE_LIBS)
 else
 ifeq ($(TARGET),win64)
 	CC=x86_64-w64-mingw32-gcc
 	ARCH_FLAGS=-m64 -DLIBARCHIVE_STATIC
 	BINEXT=.exe
-	LIB=-static $(ARCHIVE_LIBS)
+	LIB=-static $(STATIC_ARCHIVE_LIBS)
 else
 ifeq ($(TARGET),linux32)
 	CFLAGS=$(POSIX_CFLAGS)
@@ -79,7 +80,7 @@ setup:
 save_the_zazus: $(BUILDDIR_BIN)/save_the_zazus$(BINEXT)
 
 $(BUILDDIR_BIN)/save_the_zazus$(BINEXT): $(OBJ) # libarchive/.libs/libarchive.a
-	$(CC) $(ARCH_FLAGS) $(LIB) $(OBJ) -o $@
+	$(CC) $(ARCH_FLAGS) $(OBJ) $(LIB) -o $@
 
 $(BUILDDIR_SRC)/package_img_atlas0_png.c: package/img/atlas0.png
 	xxd -i $< > $@
