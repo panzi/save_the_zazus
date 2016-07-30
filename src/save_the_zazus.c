@@ -465,16 +465,20 @@ int main() {
 		goto error;
 	}
 
-		arch = archive_write_new();
+	arch = archive_write_new();
 	if (arch == NULL) {
 		PDEBUG();
 		goto error;
 	}
 
-	if (archive_write_set_format_zip(arch) != ARCHIVE_OK ||
-		archive_write_set_options(arch, "zip:experimental") != ARCHIVE_OK ||
-		archive_write_add_filter_none(arch) != ARCHIVE_OK) {
+	if (archive_write_set_format_zip(arch) != ARCHIVE_OK) {
 		FDEBUG("%s: %s", backup_path, archive_error_string(backup));
+		goto error;
+	}
+
+	if (archive_write_add_filter_none(arch) != ARCHIVE_OK) {
+		FDEBUG("%s: %s", backup_path, archive_error_string(backup));
+		goto error;
 	}
 
 	if (archive_write_open_filename(arch, archive_path) != ARCHIVE_OK) {
