@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
+#include <unistd.h>
 #include <stdbool.h>
 #include <limits.h>
 #include <archive.h>
@@ -35,6 +36,108 @@ struct patch_entry {
 #define PDEBUG() perror(__FILE__ ":" STR(__LINE__) ":error")
 #define FDEBUG(FMT, ...) fprintf(stderr, "%s:%u:error: " FMT "\n", __FILE__, __LINE__, __VA_ARGS__)
 #define DEBUG(MSG) fprintf(stderr, "%s:%u:error: %s\n", __FILE__, __LINE__, MSG)
+
+#ifdef __linux__
+
+// use sendfile() under Linux for zero-context switch file copy
+#include <fcntl.h>
+#include <sys/sendfile.h>
+
+static int copyfile(const char *src, const char *dst) {
+	int status =  0;
+	int infd   = -1;
+	int outfd  = -1;
+	struct stat info;
+
+	infd = open(src, O_RDONLY);
+	if (infd < 0) {
+		goto error;
+	}
+
+	outfd = open(dst, O_CREAT | O_WRONLY);
+	if (outfd < 0) {
+		goto error;
+	}
+
+	if (fstat(infd, &info) < 0) {
+		goto error;
+	}
+
+	if (sendfile(outfd, infd, NULL, (size_t)info.st_size) < (ssize_t)info.st_size) {
+		goto error;
+	}
+
+	goto end;
+
+error:
+	status = -1;
+
+end:
+	if (infd >= 0) {
+		close(infd);
+		infd = -1;
+	}
+
+	if (outfd >= 0) {
+		close(outfd);
+		outfd = -1;
+	}
+
+	return status;
+}
+#else
+static int copyfile(const char *src, const char *dst) {
+	char buf[BUFSIZ];
+	FILE *fsrc = NULL;
+	FILE *fdst = NULL;
+	int status = 0;
+
+	fsrc = fopen(src, "rb");
+	if (!fsrc) {
+		goto error;
+	}
+
+	fdst = fopen(dst, "wb");
+	if (!fdst) {
+		goto error;
+	}
+
+	for (;;) {
+		size_t count = fread(buf, 1, BUFSIZ, fsrc);
+
+		if (count < BUFSIZ && ferror(fsrc)) {
+			goto error;
+		}
+
+		if (count > 0 && fwrite(buf, 1, count, fdst) != count) {
+			goto error;
+		}
+
+		if (count < BUFSIZ) {
+			break;
+		}
+	}
+
+	goto end;
+
+error:
+	status = -1;
+
+end:
+
+	if (fsrc) {
+		fclose(fsrc);
+		fsrc = NULL;
+	}
+
+	if (fdst) {
+		fclose(fdst);
+		fdst = NULL;
+	}
+
+	return status;
+}
+#endif
 
 #if defined(STZ_WINDOWS)
 #	include <windows.h>
@@ -302,7 +405,7 @@ int main() {
 		{NULL, NULL, 0},
 	};
 	int status = EXIT_SUCCESS;
-	bool renamed = false;
+	bool made_backup = false;
 	struct archive *arch = NULL;
 	struct archive *backup = NULL;
 	struct archive_entry *entry = NULL;
@@ -329,11 +432,15 @@ int main() {
 		goto error;
 	}
 
-	if (rename(archive_path, backup_path) < 0) {
-		FDEBUG("%s: %s", backup_path, strerror(errno));
-		goto error;
+	if (access(backup_path, F_OK) == -1) {
+		if (rename(archive_path, backup_path) < 0) {
+			if (errno != EEXIST) {
+				FDEBUG("%s: %s", backup_path, strerror(errno));
+				goto error;
+			}
+		}
 	}
-	renamed = true;
+	made_backup = true;
 
 	printf("Patching game archive: %s\n", archive_path);
 
@@ -358,7 +465,7 @@ int main() {
 		goto error;
 	}
 
-	arch = archive_write_new();
+		arch = archive_write_new();
 	if (arch == NULL) {
 		PDEBUG();
 		goto error;
@@ -393,7 +500,7 @@ int main() {
 		}
 
 		if (found_patch) {
-			printf("Patching: %s\n", path);
+			printf("Replacing: %s\n", path);
 			struct archive_entry *new_entry = archive_entry_new2(arch);
 			if (new_entry == NULL) {
 				PDEBUG();
@@ -460,13 +567,6 @@ int main() {
 error:
 	status = EXIT_FAILURE;
 
-	if (renamed) {
-		printf("Restoring backup: %s\n", backup_path);
-		if (rename(backup_path, archive_path) < 0) {
-			FDEBUG("%s: %s", archive_path, strerror(errno));
-		}
-	}
-
 end:
 	if (entry) {
 		archive_entry_free(entry);
@@ -494,6 +594,15 @@ end:
 
 	if (status == EXIT_SUCCESS) {
 		printf("Successfully pached game.\n");
+	}
+	else if (made_backup) {
+		printf("Restoring backup: %s\n", backup_path);
+		if (unlink(archive_path) == -1 && errno != ENOENT) {
+			FDEBUG("%s: %s", archive_path, strerror(errno));
+		}
+		else if (copyfile(backup_path, archive_path) == -1) {
+			FDEBUG("%s: %s", archive_path, strerror(errno));
+		}
 	}
 
 #ifdef STZ_WINDOWS

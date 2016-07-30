@@ -65,7 +65,7 @@ endif
 endif
 endif
 
-.PHONY: all clean save_the_zazus setup pkg
+.PHONY: all clean save_the_zazus setup pkg patch
 
 # keep intermediary files (e.g. package_img_atlas0_png.c) to
 # do less redundant work (when cross compiling):
@@ -75,11 +75,13 @@ all: save_the_zazus
 
 setup:
 	mkdir -p $(BUILDDIR_BIN) $(BUILDDIR_SRC)
-#	cd libarchive; build/autogen.sh
+
+patch: save_the_zazus
+	$(BUILDDIR_BIN)/save_the_zazus$(BINEXT)
 
 save_the_zazus: $(BUILDDIR_BIN)/save_the_zazus$(BINEXT)
 
-$(BUILDDIR_BIN)/save_the_zazus$(BINEXT): $(OBJ) # libarchive/.libs/libarchive.a
+$(BUILDDIR_BIN)/save_the_zazus$(BINEXT): $(OBJ)
 	$(CC) $(ARCH_FLAGS) $(OBJ) $(LIB) -o $@
 
 $(BUILDDIR_SRC)/package_img_atlas0_png.c: package/img/atlas0.png
@@ -96,12 +98,6 @@ $(BUILDDIR_BIN)/%_png.o: $(BUILDDIR_SRC)/%_png.c
 
 $(BUILDDIR_BIN)/%.o: src/%.c
 	$(CC) $(ARCH_FLAGS) $(CFLAGS) -c $< -o $@
-
-#libarchive/.libs/libarchive.a:
-#	cd libarchive; ./configure --enable-static --without-xml2 \
-#		--without-expat --without-openssl --without-nettle \
-#		--without-lzo2 --without-lzma --without-lz4 \
-#		--without-lzmadec --without-bz2lib
 
 clean:
 	rm -f \
