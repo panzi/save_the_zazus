@@ -451,12 +451,12 @@ int main() {
 	}
 
 	if (archive_read_support_filter_all(backup) != ARCHIVE_OK) {
-		PDEBUG();
+		FDEBUG("%s: %s", backup_path, archive_error_string(backup));
 		goto error;
 	}
 
 	if (archive_read_support_format_all(backup) != ARCHIVE_OK) {
-		PDEBUG();
+		FDEBUG("%s: %s", backup_path, archive_error_string(backup));
 		goto error;
 	}
 
@@ -472,12 +472,12 @@ int main() {
 	}
 
 	if (archive_write_set_format_zip(arch) != ARCHIVE_OK) {
-		FDEBUG("%s: %s", backup_path, archive_error_string(backup));
+		FDEBUG("%s: %s", backup_path, archive_error_string(arch));
 		goto error;
 	}
 
 	if (archive_write_add_filter_none(arch) != ARCHIVE_OK) {
-		FDEBUG("%s: %s", backup_path, archive_error_string(backup));
+		FDEBUG("%s: %s", backup_path, archive_error_string(arch));
 		goto error;
 	}
 
